@@ -1,0 +1,6 @@
+[submodule "EthernautChallenges/lib/forge-std"]
+	path = EthernautChallenges/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "Damn-Defi-v4/lib/forge-std"]
+	path = Damn-Defi-v4/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
