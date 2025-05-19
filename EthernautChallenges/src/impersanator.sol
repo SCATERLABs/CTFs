@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+import "/home/nithin/SCATERLABs/CTFs/EthernautChallenges/lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 
+// check the eroro by using impersantor account
 // SlockDotIt ECLocker factory
 contract Impersonator is Ownable {
     uint256 public lockCounter;
@@ -16,7 +17,7 @@ contract Impersonator is Ownable {
 
     constructor(uint256 _lockCounter) Ownable(msg.sender) {
         lockCounter = _lockCounter;
-    }
+    } //hello hii
 
     function deployNewLock(bytes memory signature) public onlyOwner {
         // Deploy a new lock

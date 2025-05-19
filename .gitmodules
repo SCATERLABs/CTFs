@@ -4,3 +4,6 @@
 [submodule "Damn-Defi-v4/lib/forge-std"]
 	path = Damn-Defi-v4/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "EthernautChallenges/lib/openzeppelin-contracts"]
+	path = EthernautChallenges/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
