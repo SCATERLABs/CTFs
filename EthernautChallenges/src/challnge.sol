@@ -11,7 +11,7 @@ contract Challenge {
 
             // Check condition (this is a simplified version of what the bytecode might be doing)
             if iszero(result) {
-                revert(0, 0)
+                revert(0, 0) //hiii helllo this is nithinkuar
             }
         }
     }
