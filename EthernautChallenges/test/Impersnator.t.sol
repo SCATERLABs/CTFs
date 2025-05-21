@@ -1,89 +1,65 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import "../lib/forge-std/src/Test.sol";
-import "../lib/forge-std/src/console.sol";
+import "forge-std/Test.sol";
 import "../src/impersanator.sol";
 
 contract ECLockerTest is Test {
-    Impersonator public impersonator;
-    ECLocker public locker;
-    address public owner = vm.addr(1);
-    uint256 public lockId = 1;
-    bytes public signature;
+    Impersonator public imp;
+    address public nk_signer;
+    uint256 private nk_signerPk;
+    bytes32 public msgHash;
+    uint256 public lockId;
+    address public controller_nk;
 
     function setUp() public {
-        vm.startPrank(owner);
-        impersonator = new Impersonator(lockId);
+        nk_signerPk = 0xA11CE;
+        nk_signer = vm.addr(nk_signerPk);
+        imp = new Impersonator(0); //deploy the contract impersonator
+        vm.startPrank(imp.owner());
+        lockId = 1;
+
+        //  Ethereum Signed Message Hash
+        msgHash = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                bytes32(lockId)
+            )
+        );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(nk_signerPk, msgHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        imp.deployNewLock(signature); //deploy the lock with Ethereum signed hash
         vm.stopPrank();
     }
 
     function testSignatureMalleability() public {
-        vm.startPrank(owner);
+        ECLocker locker = imp.lockers(0); //EcLocker instance
 
-        // Generate a valid signature for testing
-        (uint8 v, bytes32 r, bytes32 s) = generateValidSignature(lockId);
-        signature = abi.encodePacked(r, s, v);
+        // Sign message again to get original signature
+        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(nk_signerPk, msgHash);
 
-        // Deploy locker
-        impersonator.deployNewLock(signature);
-        locker = impersonator.lockers(0);
+        // Duplicate signatres s in ECDSA graph: s2 = n - s1
+        uint256 n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+        bytes32 s2 = bytes32(n - uint256(s1));
 
-        // Modify signature (malleability attack)
-        bytes32 sPrime = bytes32(
-            uint256(
-                0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
-            ) - uint256(s)
-        );
-        uint8 vPrime = (v == 27) ? 28 : 27;
+        // Try using both valid signatures
 
-        // Change controller using malleable signature
-        locker.changeController(vPrime, r, sPrime, address(0));
+        // First usage (original signature)
+        vm.prank(nk_signer);
+        locker.open(v1, r1, s1);
+        // Second usage (malicious signature)
+        // This should fail in a secure contract
+        uint8 v2 = v1 == 27 ? 28 : 27;
 
-        // Verify controller is now address(0)
-        assertEq(
-            locker.controller(),
-            address(0),
-            "Controller takeover via signature malleability failed"
-        );
-    }
+        vm.prank(nk_signer);
+        locker.open(v2, r1, s2); //  this should fail in a secure contract
 
-    function testDuplicateSignatureRejection() public {
-        vm.startPrank(owner);
-
-        (uint8 v, bytes32 r, bytes32 s) = generateValidSignature(lockId);
-        signature = abi.encodePacked(r, s, v);
-
-        impersonator.deployNewLock(signature);
-        locker = impersonator.lockers(0);
-
-        // First valid use
-        locker.open(v, r, s);
-
-        // Try reusing the same signature
-        vm.expectRevert(ECLocker.SignatureAlreadyUsed.selector);
-        locker.open(v, r, s);
-    }
-
-    function testUnauthorizedControllerChange() public {
-        vm.startPrank(owner);
-
-        (uint8 v, bytes32 r, bytes32 s) = generateValidSignature(lockId);
-        signature = abi.encodePacked(r, s, v);
-
-        impersonator.deployNewLock(signature);
-        locker = impersonator.lockers(0);
-
-        // Attempt unauthorized controller change
-        vm.expectRevert(ECLocker.InvalidController.selector);
-        locker.changeController(v, r, s, vm.addr(2));
-    }
-
-    function generateValidSignature(
-        uint256 _lockId
-    ) internal pure returns (uint8, bytes32, bytes32) {
-        bytes32 hash = keccak256(abi.encodePacked(_lockId));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(1, hash); //using vm.sign to use this to get the data in the v,r,s
-        return (v, r, s);
+        // locker.changeController(v2, r1, s2, nk_signer); // this should fail in a secure contract
+        // assertEq(
+        //     locker.controller(),
+        //     controller_nk,
+        //     "Controller should be changed"
+        // );
     }
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "/home/nithin/SCATERLABs/CTFs/EthernautChallenges/lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 
 // check the eroro by using impersantor account
 // SlockDotIt ECLocker factory
@@ -45,9 +45,57 @@ contract ECLocker {
 
     /// @notice Initializes the contract the lock
     /// @param _lockId uinique lock id set by SlockDotIt's factory
-    /// @param _signature the signature of the initial controller
+    // /// @param _signature the signature of the initial controller
+    // constructor(uint256 _lockId, bytes memory _signature) {
+    //     // Set lockId
+    //     lockId = _lockId;
+
+    //     // Compute msgHash
+    //     bytes32 _msgHash;
+    //     assembly {
+    //         mstore(0x00, "\x19Ethereum Signed Message:\n32") // 28 bytes
+    //         mstore(0x1C, _lockId) // 32 bytes
+    //         _msgHash := keccak256(0x00, 0x3c) //28 + 32 = 60 bytes
+    //     }
+    //     msgHash = _msgHash;
+
+    //     // Recover the initial controller from the signature
+    //     address initialController = address(1);
+    //     assembly {
+    //         let ptr := mload(0x40)
+    //         mstore(ptr, _msgHash) // 32 bytes
+    //         mstore(add(ptr, 32), mload(add(_signature, 0x60))) // 32 byte v
+    //         mstore(add(ptr, 64), mload(add(_signature, 0x20))) // 32 bytes r
+    //         mstore(add(ptr, 96), mload(add(_signature, 0x40))) // 32 bytes s
+    //         pop(
+    //             staticcall(
+    //                 gas(), // Amount of gas left for the transaction.
+    //                 initialController, // Address of `ecrecover`.
+    //                 ptr, // Start of input.
+    //                 0x80, // Size of input.
+    //                 0x00, // Start of output.
+    //                 0x20 // Size of output.
+    //             )
+    //         )
+    //         if iszero(returndatasize()) {
+    //             //if return data is zero ,then static call is not working correctly
+    //             mstore(0x00, 0x8baa579f) // `InvalidSignature()`.
+    //             revert(0x1c, 0x04)
+    //         }
+    //         initialController := mload(0x00)
+    //         mstore(0x40, add(ptr, 128)) //update the pointer use another location becuase dont overwrite the previous one
+    //     }
+
+    //     // Invalidate signature
+    //     usedSignatures[keccak256(_signature)] = true;
+
+    //     // Set the controller
+    //     controller = initialController;
+
+    //     // emit LockInitializated
+    //     emit LockInitializated(initialController, block.timestamp);
+    // }
     constructor(uint256 _lockId, bytes memory _signature) {
-        // Set lockId
         lockId = _lockId;
 
         // Compute msgHash
@@ -55,43 +103,29 @@ contract ECLocker {
         assembly {
             mstore(0x00, "\x19Ethereum Signed Message:\n32") // 28 bytes
             mstore(0x1C, _lockId) // 32 bytes
-            _msgHash := keccak256(0x00, 0x3c) //28 + 32 = 60 bytes
+            _msgHash := keccak256(0x00, 0x3c) // 60 bytes total
         }
         msgHash = _msgHash;
 
-        // Recover the initial controller from the signature
-        address initialController = address(1);
+        // Extract r, s, v from signature
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
         assembly {
-            let ptr := mload(0x40)
-            mstore(ptr, _msgHash) // 32 bytes
-            mstore(add(ptr, 32), mload(add(_signature, 0x60))) // 32 byte v
-            mstore(add(ptr, 64), mload(add(_signature, 0x20))) // 32 bytes r
-            mstore(add(ptr, 96), mload(add(_signature, 0x40))) // 32 bytes s
-            pop(
-                staticcall(
-                    gas(), // Amount of gas left for the transaction.
-                    initialController, // Address of `ecrecover`.
-                    ptr, // Start of input.
-                    0x80, // Size of input.
-                    0x00, // Start of output.
-                    0x20 // Size of output.
-                )
-            )
-            if iszero(returndatasize()) {
-                mstore(0x00, 0x8baa579f) // `InvalidSignature()`.
-                revert(0x1c, 0x04)
-            }
-            initialController := mload(0x00)
-            mstore(0x40, add(ptr, 128))
+            r := mload(add(_signature, 0x20))
+            s := mload(add(_signature, 0x40))
+            v := byte(0, mload(add(_signature, 0x60)))
         }
+
+        // Recover signer address
+        address initialController = ecrecover(_msgHash, v, r, s);
+        require(initialController != address(0), "Invalid signature");
 
         // Invalidate signature
         usedSignatures[keccak256(_signature)] = true;
 
-        // Set the controller
+        // Set controller
         controller = initialController;
-
-        // emit LockInitializated
         emit LockInitializated(initialController, block.timestamp);
     }
 
