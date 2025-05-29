@@ -61,10 +61,10 @@ contract Exchange is ReentrancyGuard {
             revert NotEnoughFunds();
         }
 
-        token.transferFrom(msg.sender, address(this), id);
+        token.transferFrom(msg.sender, address(this), id); //funds transfer to exchange contract  and msg.sender is the attacker
         token.burn(id);
 
-        payable(msg.sender).sendValue(price);
+        payable(msg.sender).sendValue(price); //after sell the NFT,send the price to the seller(here is msg.sender)
 
         emit TokenSold(msg.sender, id, price);
     }
