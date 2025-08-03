@@ -17,7 +17,7 @@ import {IProxyCreationCallback} from "safe-smart-account/contracts/proxies/IProx
 contract WalletRegistry is IProxyCreationCallback, Ownable {
     uint256 private constant EXPECTED_OWNERS_COUNT = 1;
     uint256 private constant EXPECTED_THRESHOLD = 1;
-    uint256 private constant PAYMENT_AMOUNT = 10e18;
+    uint256 private constant PAYMENT_AMOUNT = 10e18; //10 ether
 
     address public immutable singletonCopy;
     address public immutable walletFactory;
@@ -43,7 +43,7 @@ contract WalletRegistry is IProxyCreationCallback, Ownable {
         address tokenAddress,
         address[] memory initialBeneficiaries
     ) {
-        _initializeOwner(msg.sender);
+        _initializeOwner(msg.sender); //who will deploy then act as a owner
 
         singletonCopy = singletonCopyAddress;
         walletFactory = walletFactoryAddress;
@@ -64,23 +64,30 @@ contract WalletRegistry is IProxyCreationCallback, Ownable {
      * @notice Function executed when user creates a Safe wallet via SafeProxyFactory::createProxyWithCallback
      *          setting the registry's address as the callback.
      */
-    function proxyCreated(SafeProxy proxy, address singleton, bytes calldata initializer, uint256) external override {
+    function proxyCreated(
+        SafeProxy proxy,
+        address singleton,
+        bytes calldata initializer,
+        uint256
+    ) external override {
         if (token.balanceOf(address(this)) < PAYMENT_AMOUNT) {
+            //this contract have 40 ethers
             // fail early
             revert NotEnoughFunds();
         }
 
-        address payable walletAddress = payable(proxy);
+        address payable walletAddress = payable(proxy); //set up wallet
 
         // Ensure correct factory and copy
         if (msg.sender != walletFactory) {
+            //ensure correct calls
             revert CallerNotFactory();
         }
 
         if (singleton != singletonCopy) {
             revert FakeSingletonCopy();
         }
-
+        //@audit this is the function where the exploit will happen
         // Ensure initial calldata was a call to `Safe::setup`
         if (bytes4(initializer[:4]) != Safe.setup.selector) {
             revert InvalidInitialization();
@@ -107,6 +114,7 @@ contract WalletRegistry is IProxyCreationCallback, Ownable {
         }
 
         address fallbackManager = _getFallbackManager(walletAddress);
+        //something fissy
         if (fallbackManager != address(0)) {
             revert InvalidFallbackManager(fallbackManager);
         }
@@ -118,12 +126,23 @@ contract WalletRegistry is IProxyCreationCallback, Ownable {
         wallets[walletOwner] = walletAddress;
 
         // Pay tokens to the newly created wallet
-        SafeTransferLib.safeTransfer(address(token), walletAddress, PAYMENT_AMOUNT);
+        SafeTransferLib.safeTransfer(
+            address(token),
+            walletAddress,
+            PAYMENT_AMOUNT
+        );
     }
 
-    function _getFallbackManager(address payable wallet) private view returns (address) {
-        return abi.decode(
-            Safe(wallet).getStorageAt(uint256(keccak256("fallback_manager.handler.address")), 0x20), (address)
-        );
+    function _getFallbackManager(
+        address payable wallet
+    ) private view returns (address) {
+        return
+            abi.decode(
+                Safe(wallet).getStorageAt(
+                    uint256(keccak256("fallback_manager.handler.address")),
+                    0x20
+                ),
+                (address)
+            );
     }
 }
